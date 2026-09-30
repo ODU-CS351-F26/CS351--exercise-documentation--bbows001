@@ -17,6 +17,10 @@ java {
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.0'
     testImplementation 'org.hamcrest:hamcrest-library:2.2'
+
+    // Added test dependencies for JUnit
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.withType(Test) {
@@ -26,8 +30,110 @@ tasks.withType(Test) {
         events "passed", "skipped", "failed"
         }
 }
+// Task to copy custom HTML into reports/
+tasks.register('copyHtml', Copy) {
+	from('src/main/html')
+	into layout.buildDirectory.dir('reports')
+} 
+
+// Task to copy JavaDoc into reports/
+tasks.register('copyJavaDoc', Copy) {
+	dependsOn tasks.named('javadoc')
+	from(layout.buildDirectory.dir('docs/javadoc'))
+	into layout.buildDirectory.dir('reports/javadoc')
+}
+
+// Main reports task
+task reports(dependsOn: ['build', 'copyHtml', 'copyJavaDoc']){
+}
+
+// Define the location for the temporary working tree
+def pagesDir = file("${project.rootDir}/build/website-temp").absolutePath
+
+// Step 1: Clean up any broken state from previous failed runs
+tasks.register('clearPages', Delete) {
+    delete pagesDir
+}
+
+// Step 2: Establish the Git Worktree
+tasks.register('workTreeAdd', Exec) {
+    dependsOn 'clearPages'
+    workingDir = '.'
+    commandLine = ['git', 'worktree', 'add', '-f', pagesDir, 'gh-pages']
+}
+
+// Step 3: Explicitly pull the latest remote tracking states
+tasks.register('workTreePull', Exec) {
+    dependsOn 'workTreeAdd'
+    workingDir = pagesDir
+    commandLine = ['git', 'pull', 'origin', 'gh-pages']
+    ignoreExitValue = true // Prevents crashing if the branch is already perfectly sync'd
+}
+
+// Step 4: The copy tasks (Must explicitly depend on the compiled files and the worktree setup)
+tasks.register('copyReports', Copy) {
+    // 1. Force the 'reports' task to build your tests and javadocs first
+    // 2. Force the worktree to finish checking out before writing to it
+    dependsOn 'reports', 'workTreePull'
+    
+    from 'build/reports'
+    into pagesDir
+}
+
+tasks.register('copyWebsite', Copy) {
+    dependsOn 'copyReports'
+    from file('src/main/html')
+    into pagesDir
+}
+
+// Step 5: Consolidate Staging, Committing, and Pushing inside one unified execution flow
+tasks.register('pushWebsite', Exec) {
+    dependsOn 'copyWebsite'
+    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+    
+    // Using a shell executor ensures directory context is fixed and files are forced inside the index
+    commandLine 'sh', '-c', """
+        cd "${pagesDir}"
+        
+        # Create a .nojekyll flag so GitHub Pages does not filter out the reports/ folder
+        touch .nojekyll
+        
+        # Force add (-f) everything to bypass the project root's .gitignore rule blocking 'build'
+        git add -f .nojekyll
+        git add -f .
+        
+        # Commit the modifications safely
+        if ! git diff --cached --quiet; then
+            git commit -m "Updating webpages at ${timestamp}"
+        else
+            git commit --allow-empty -m "Automated build run at ${timestamp}"
+        fi
+        
+        # Send the updates live to GitHub
+        git push origin gh-pages
+    """
+    ignoreExitValue = false
+}
+
+// Step 6: The Target Task (Guarantees the cleanup happens ONLY after a successful push)
+tasks.register('deployReports', Exec) {
+    group = "Reporting"
+    description = "Commit and push website changes to GitHub gh-pages branch"
+    
+    // Explicitly run the push flow first
+    dependsOn 'pushWebsite'
+    workingDir = '.'
+    
+    // Clean up files and prune the worktree safely at the very end of execution
+    commandLine 'sh', '-c', """
+        rm -rf "${pagesDir}"
+        git worktree prune
+    """
+}
 
 application { //Allows  ./gradlew run --args=path-to-test-data
     mainClass = 'edu.odu.cs.MostCommonWords'
 }
+
+
 

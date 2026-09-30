@@ -1,6 +1,6 @@
 # Project Reports
 
-Your Name
+Brian Bowser
 
 * [Tests](./reports/tests/test/)
 * [JavaDoc](./reports/javadoc/)
