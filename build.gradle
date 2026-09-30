@@ -50,7 +50,7 @@ task reports(dependsOn: ['build', 'copyHtml', 'copyJavaDoc']){
 // Define the location for the temporary working tree
 def pagesDir = file("${project.rootDir}/build/website-temp").absolutePath
 
-// Step 1: Clean up any broken state from previous failed runs
+// Step 1: Clean up any broken state from previous runs
 tasks.register('clearPages', Delete) {
     delete pagesDir
 }
@@ -62,20 +62,17 @@ tasks.register('workTreeAdd', Exec) {
     commandLine = ['git', 'worktree', 'add', '-f', pagesDir, 'gh-pages']
 }
 
-// Step 3: Explicitly pull the latest remote tracking states
+// Step 3: Pull the latest tracking states
 tasks.register('workTreePull', Exec) {
     dependsOn 'workTreeAdd'
     workingDir = pagesDir
     commandLine = ['git', 'pull', 'origin', 'gh-pages']
-    ignoreExitValue = true // Prevents crashing if the branch is already perfectly sync'd
+    ignoreExitValue = true 
 }
 
-// Step 4: The copy tasks (Must explicitly depend on the compiled files and the worktree setup)
+// Step 4: The copy tasks
 tasks.register('copyReports', Copy) {
-    // 1. Force the 'reports' task to build your tests and javadocs first
-    // 2. Force the worktree to finish checking out before writing to it
     dependsOn 'reports', 'workTreePull'
-    
     from 'build/reports'
     into pagesDir
 }
@@ -86,50 +83,81 @@ tasks.register('copyWebsite', Copy) {
     into pagesDir
 }
 
-// Step 5: Consolidate Staging, Committing, and Pushing inside one unified execution flow
-tasks.register('pushWebsite', Exec) {
+// Step 5: Automatically generate index.html from index.md contents
+tasks.register('generateHtmlIndex') {
     dependsOn 'copyWebsite'
+    
+    doLast {
+        def mdFile = file("src/main/html/index.md")
+        def htmlFile = file("${pagesDir}/index.html")
+        
+        if (mdFile.exists()) {
+            // Read lines and strip out basic Markdown patterns to produce a clean HTML fallback
+            def htmlContent = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Reports</title>
+    <style>body { font-family: sans-serif; margin: 40px; line-height: 1.6; }</style>
+</head>
+<body>
+"""
+            mdFile.eachLine { line ->
+                if (line.startsWith('# ')) {
+                    htmlContent += "    <h1>${line.substring(2)}</h1>\n"
+                } else if (line.trim().startsWith('* ')) {
+                    // Extract link details: * [Name](URL) -> <li><a href="URL">Name</a></li>
+                    def matcher = line =~ /\* \[(.*)\]\((.*)\)/
+                    if (matcher.find()) {
+                        htmlContent += "    <li><a href=\"${matcher[0][2]}\">${matcher[0][1]}</a></li>\n"
+                    } else {
+                        htmlContent += "    <li>${line.substring(2)}</li>\n"
+                    }
+                } else if (!line.trim().isEmpty()) {
+                    htmlContent += "    <p>${line}</p>\n"
+                }
+            }
+            
+            htmlContent += "</body>\n</html>"
+            htmlFile.text = htmlContent
+        }
+    }
+}
+
+// Step 6: Consolidate Staging, Committing, and Pushing
+tasks.register('pushWebsite', Exec) {
+    dependsOn 'generateHtmlIndex'
     def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
     
-    // Using a shell executor ensures directory context is fixed and files are forced inside the index
     commandLine 'sh', '-c', """
         cd "${pagesDir}"
         
-        # Create a .nojekyll flag so GitHub Pages does not filter out the reports/ folder
-        touch .nojekyll
-        
-        # Force add (-f) everything to bypass the project root's .gitignore rule blocking 'build'
-        git add -f .nojekyll
+        # Override project root .gitignore constraints on the 'build' path folder
         git add -f .
         
-        # Commit the modifications safely
         if ! git diff --cached --quiet; then
             git commit -m "Updating webpages at ${timestamp}"
         else
             git commit --allow-empty -m "Automated build run at ${timestamp}"
         fi
         
-        # Send the updates live to GitHub
         git push origin gh-pages
     """
     ignoreExitValue = false
 }
 
-// Step 6: The Target Task (Guarantees the cleanup happens ONLY after a successful push)
+// Step 7: The Target Task (Clean up and finish)
 tasks.register('deployReports', Exec) {
     group = "Reporting"
     description = "Commit and push website changes to GitHub gh-pages branch"
-    
-    // Explicitly run the push flow first
     dependsOn 'pushWebsite'
     workingDir = '.'
-    
-    // Clean up files and prune the worktree safely at the very end of execution
     commandLine 'sh', '-c', """
         rm -rf "${pagesDir}"
         git worktree prune
     """
 }
+
+
 
 application { //Allows  ./gradlew run --args=path-to-test-data
     mainClass = 'edu.odu.cs.MostCommonWords'
