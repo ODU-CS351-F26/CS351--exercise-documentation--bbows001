@@ -55,7 +55,6 @@ gitPublish {
     repoUri = 'git@github.com:ODU-CS351-F26/CS351--exercise-documentation--bbows001.git'
 
     // Location the plugin clones repo temporarily
-    repoDir = file("build/gitPublish") 
     branch = 'gh-pages'
 
     // Grab everything to copy
