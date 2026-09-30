@@ -30,6 +30,7 @@ tasks.withType(Test) {
         events "passed", "skipped", "failed"
         }
 }
+
 // Task to copy custom HTML into reports/
 tasks.register('copyHtml', Copy) {
 	from 'src/main/html'
@@ -40,93 +41,38 @@ tasks.register('copyHtml', Copy) {
 tasks.register('copyJavaDoc', Copy) {
 	dependsOn tasks.named('javadoc')
 	from 'build/docs/javadoc'
-	into 'build/reports/reports/javadoc'
+	into 'build/reports/javadoc'
 }
 
 // Main reports task
-task reports(dependsOn: ['build', 'test', 'copyHtml', 'copyJavaDoc']){
+tasks.register('reports') {
+	dependsOn 'build', 'javadoc', 'copyHtml', 'copyJavaDoc'
 }
 
-// Define the location for the temporary working tree
-def pagesDir = file("${project.rootDir}/build/website-temp").absolutePath
+// Configure the built-in git-publish plugin
+gitPublish {
+    // Set gitHub Repo
+    repoUri = 'git@github.com:ODU-CS351-F26/CS351--exercise-documentation--bbows001.git'
 
-// Prepare the worktree
-tasks.register('clearPages', Delete) {
-    delete pagesDir
-}
+    // Location the plugin clones repo temporarily
+    repoDir = file("build/gitPublish") 
+    branch = 'gh-pages'
 
-tasks.register('workTreeAdd', Exec) {
-    dependsOn 'clearPages'
-    workingDir = '.'
-    commandLine = ['git', 'worktree', 'add', '-f', pagesDir, 'gh-pages']
-}
-
-tasks.register('workTreeCheckout', Exec) {
-    dependsOn 'workTreeAdd'
-    workingDir = pagesDir
-    commandLine = ['git', 'checkout', 'gh-pages']
-}
-
-tasks.register('workTree', Exec) {
-    dependsOn 'workTreeCheckout'
-    workingDir = pagesDir
-    commandLine = ['git', 'pull', 'origin', 'gh-pages']
-}
-
-// Copy files cleanly into their EXACT relative paths expected by myIndex.md
-tasks.register('copyReports', Copy) {
-    dependsOn 'reports', 'workTree'
-    
-    // Copy the main website files (including myIndex.md) to the root of gh-pages
-    from 'src/main/html'
-    into pagesDir
-    
-    // Copy the Unit Test report HTML output into /reports/tests/test/
-    from('build/reports/tests/test') {
-        into 'reports/tests/test'
+    // Grab everything to copy
+    contents {
+        from 'build/reports'
     }
-    
-    // Copy the Javadoc output into /reports/javadoc/
-    from('build/docs/javadoc') {
-        into 'reports/javadoc'
-    }
+    commitMessage = "Updating webpages at ${new Date().format('yyyy-MM-dd HH:mm:ss')}"
 }
 
-// Stage and commit changes to the gh-pages branch
-tasks.register('stageWebsite', Exec) {
-    dependsOn 'copyReports' // FIX: Chain directly from copyReports
-    workingDir = pagesDir
-    commandLine = ['git', 'add', '--all', '.']
-}
+// Ensure tests and reports generate before git-publish gathers the files
+tasks.gitPublishCopy.dependsOn tasks.named('reports')
 
-tasks.register('commitWebsite', Exec) {
-    dependsOn 'stageWebsite'
-    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-    workingDir = pagesDir
-    commandLine = ['git', 'commit', '-m', "Updating webpages at ${timestamp}"]
-    ignoreExitValue = true // Prevents crashing if there are absolutely zero new changes
-}
-
-// Push the changes up to GitHub
-tasks.register('pushWebsite', Exec) {
-    dependsOn 'commitWebsite'
-    workingDir = pagesDir
-    commandLine = ['git', 'push', 'origin', 'gh-pages']
-}
-
-// Clean up the workspace local worktree folder safely
-tasks.register('cleanWorkTree', Delete) {
-    dependsOn 'pushWebsite'
-    delete pagesDir
-}
-
-// The target task requested: orchestrates the sequence and prunes the worktree
-tasks.register('deployReports', Exec) {
+// Deployment task 
+tasks.register('deployReports') {
     group = "Reporting"
     description = "Commit and push website changes to GitHub gh-pages branch"
-    dependsOn 'cleanWorkTree'
-    workingDir = '.'
-    commandLine = ['git', 'worktree', 'prune']
+    dependsOn tasks.named('gitPublishPush')
 }
 
 application { //Allows  ./gradlew run --args=path-to-test-data
