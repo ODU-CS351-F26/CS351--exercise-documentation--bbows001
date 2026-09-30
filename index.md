@@ -2,5 +2,5 @@
 
 Brian Bowser
 
-* [Tests](./tests/test/)
-* [JavaDoc](./javadoc/)
+* [Tests](./reports/tests/test/)
+* [JavaDoc](./reports/javadoc/)
