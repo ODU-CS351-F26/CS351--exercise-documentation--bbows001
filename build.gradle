@@ -70,50 +70,41 @@ tasks.register('workTreeCheckout', Exec) {
 tasks.register('workTree', Exec) {
     dependsOn 'workTreeCheckout'
     workingDir = pagesDir
-    commandLine = ['git', 'pull']
+    commandLine = ['git', 'pull', 'origin', 'gh-pages']
 }
 
-// Copy files into the worktree
+// Copy files cleanly into their EXACT relative paths expected by myIndex.md
 tasks.register('copyReports', Copy) {
     dependsOn 'reports', 'workTree'
-    // Copy the main web files
-    from('build/reports') {
-	exclude 'reports'
-    }
-    // Copy the generated report folder
-    from('build/reports/reports') {
-	into 'reports'
-    }
-    // Pull the unit test reports
-    from('build/reports/tests') {
-	into 'reports/tests'
-    }
+    
+    // Copy the main website files (including myIndex.md) to the root of gh-pages
+    from 'src/main/html'
     into pagesDir
-}
-
-tasks.register('copyWebsite', Copy) {
-    dependsOn 'copyReports'
-    from file('src/main/html')
-    into pagesDir
+    
+    // Copy the Unit Test report HTML output into /reports/tests/test/
+    from('build/reports/tests/test') {
+        into 'reports/tests/test'
+    }
+    
+    // Copy the Javadoc output into /reports/javadoc/
+    from('build/docs/javadoc') {
+        into 'reports/javadoc'
+    }
 }
 
 // Stage and commit changes to the gh-pages branch
 tasks.register('stageWebsite', Exec) {
-    dependsOn 'copyWebsite'
+    dependsOn 'copyReports' // FIX: Chain directly from copyReports
     workingDir = pagesDir
     commandLine = ['git', 'add', '--all', '.']
-    ignoreExitValue = true
 }
 
 tasks.register('commitWebsite', Exec) {
     dependsOn 'stageWebsite'
-    
-    // Generates a current timestamp for the commit message
     def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-
     workingDir = pagesDir
     commandLine = ['git', 'commit', '-m', "Updating webpages at ${timestamp}"]
-    ignoreExitValue = true
+    ignoreExitValue = true // Prevents crashing if there are absolutely zero new changes
 }
 
 // Push the changes up to GitHub
@@ -121,10 +112,9 @@ tasks.register('pushWebsite', Exec) {
     dependsOn 'commitWebsite'
     workingDir = pagesDir
     commandLine = ['git', 'push', 'origin', 'gh-pages']
-    ignoreExitValue = true
 }
 
-// Clean up the workspace
+// Clean up the workspace local worktree folder safely
 tasks.register('cleanWorkTree', Delete) {
     dependsOn 'pushWebsite'
     delete pagesDir

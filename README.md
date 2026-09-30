@@ -1,7 +1,7 @@
 * [Reports](https://odu-cs351-f26.github.io/CS351--exercise-documentation--bbows001/)
 
 # WordCounter
-## test
+
 There are a number of applications in which it is useful to know what the most
 common words in a language might be.  The most reliable way to determine this
 is to collect a large sample of written works in that language, make a list of
