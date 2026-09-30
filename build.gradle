@@ -32,19 +32,19 @@ tasks.withType(Test) {
 }
 // Task to copy custom HTML into reports/
 tasks.register('copyHtml', Copy) {
-	from('src/main/html')
-	into layout.buildDirectory.dir('reports')
+	from 'src/main/html'
+	into 'build/reports'
 } 
 
 // Task to copy JavaDoc into reports/
 tasks.register('copyJavaDoc', Copy) {
 	dependsOn tasks.named('javadoc')
-	from(layout.buildDirectory.dir('docs/javadoc'))
-	into layout.buildDirectory.dir('reports/javadoc')
+	from 'build/docs/javadoc'
+	into 'build/reports/reports/javadoc'
 }
 
 // Main reports task
-task reports(dependsOn: ['build', 'copyHtml', 'copyJavaDoc']){
+task reports(dependsOn: ['build', 'test', 'copyHtml', 'copyJavaDoc']){
 }
 
 // Define the location for the temporary working tree
@@ -76,7 +76,18 @@ tasks.register('workTree', Exec) {
 // Copy files into the worktree
 tasks.register('copyReports', Copy) {
     dependsOn 'reports', 'workTree'
-    from 'build/reports'
+    // Copy the main web files
+    from('build/reports') {
+	exclude 'reports'
+    }
+    // Copy the generated report folder
+    from('build/reports/reports') {
+	into 'reports'
+    }
+    // Pull the unit test reports
+    from('build/reports/tests') {
+	into 'reports/tests'
+    }
     into pagesDir
 }
 
