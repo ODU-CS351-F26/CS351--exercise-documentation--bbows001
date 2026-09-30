@@ -50,29 +50,32 @@ task reports(dependsOn: ['build', 'copyHtml', 'copyJavaDoc']){
 // Define the location for the temporary working tree
 def pagesDir = file("${project.rootDir}/build/website-temp").absolutePath
 
-// Step 1: Clean up any broken state from previous runs
+// Prepare the worktree
 tasks.register('clearPages', Delete) {
     delete pagesDir
 }
 
-// Step 2: Establish the Git Worktree
 tasks.register('workTreeAdd', Exec) {
     dependsOn 'clearPages'
     workingDir = '.'
     commandLine = ['git', 'worktree', 'add', '-f', pagesDir, 'gh-pages']
 }
 
-// Step 3: Pull the latest tracking states
-tasks.register('workTreePull', Exec) {
+tasks.register('workTreeCheckout', Exec) {
     dependsOn 'workTreeAdd'
     workingDir = pagesDir
-    commandLine = ['git', 'pull', 'origin', 'gh-pages']
-    ignoreExitValue = true 
+    commandLine = ['git', 'checkout', 'gh-pages']
 }
 
-// Step 4: The copy tasks
+tasks.register('workTree', Exec) {
+    dependsOn 'workTreeCheckout'
+    workingDir = pagesDir
+    commandLine = ['git', 'pull']
+}
+
+// Copy files into the worktree
 tasks.register('copyReports', Copy) {
-    dependsOn 'reports', 'workTreePull'
+    dependsOn 'reports', 'workTree'
     from 'build/reports'
     into pagesDir
 }
@@ -83,81 +86,47 @@ tasks.register('copyWebsite', Copy) {
     into pagesDir
 }
 
-// Step 5: Automatically generate index.html from index.md contents
-tasks.register('generateHtmlIndex') {
+// Stage and commit changes to the gh-pages branch
+tasks.register('stageWebsite', Exec) {
     dependsOn 'copyWebsite'
-    
-    doLast {
-        def mdFile = file("src/main/html/index.md")
-        def htmlFile = file("${pagesDir}/index.html")
-        
-        if (mdFile.exists()) {
-            // Read lines and strip out basic Markdown patterns to produce a clean HTML fallback
-            def htmlContent = """<!DOCTYPE html>
-<html>
-<head>
-    <title>Project Reports</title>
-    <style>body { font-family: sans-serif; margin: 40px; line-height: 1.6; }</style>
-</head>
-<body>
-"""
-            mdFile.eachLine { line ->
-                if (line.startsWith('# ')) {
-                    htmlContent += "    <h1>${line.substring(2)}</h1>\n"
-                } else if (line.trim().startsWith('* ')) {
-                    // Extract link details: * [Name](URL) -> <li><a href="URL">Name</a></li>
-                    def matcher = line =~ /\* \[(.*)\]\((.*)\)/
-                    if (matcher.find()) {
-                        htmlContent += "    <li><a href=\"${matcher[0][2]}\">${matcher[0][1]}</a></li>\n"
-                    } else {
-                        htmlContent += "    <li>${line.substring(2)}</li>\n"
-                    }
-                } else if (!line.trim().isEmpty()) {
-                    htmlContent += "    <p>${line}</p>\n"
-                }
-            }
-            
-            htmlContent += "</body>\n</html>"
-            htmlFile.text = htmlContent
-        }
-    }
+    workingDir = pagesDir
+    commandLine = ['git', 'add', '--all', '.']
+    ignoreExitValue = true
 }
 
-// Step 6: Consolidate Staging, Committing, and Pushing
-tasks.register('pushWebsite', Exec) {
-    dependsOn 'generateHtmlIndex'
+tasks.register('commitWebsite', Exec) {
+    dependsOn 'stageWebsite'
+    
+    // Generates a current timestamp for the commit message
     def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-    
-    commandLine 'sh', '-c', """
-        cd "${pagesDir}"
-        
-        # Override project root .gitignore constraints on the 'build' path folder
-        git add -f .
-        
-        if ! git diff --cached --quiet; then
-            git commit -m "Updating webpages at ${timestamp}"
-        else
-            git commit --allow-empty -m "Automated build run at ${timestamp}"
-        fi
-        
-        git push origin gh-pages
-    """
-    ignoreExitValue = false
+
+    workingDir = pagesDir
+    commandLine = ['git', 'commit', '-m', "Updating webpages at ${timestamp}"]
+    ignoreExitValue = true
 }
 
-// Step 7: The Target Task (Clean up and finish)
+// Push the changes up to GitHub
+tasks.register('pushWebsite', Exec) {
+    dependsOn 'commitWebsite'
+    workingDir = pagesDir
+    commandLine = ['git', 'push', 'origin', 'gh-pages']
+    ignoreExitValue = true
+}
+
+// Clean up the workspace
+tasks.register('cleanWorkTree', Delete) {
+    dependsOn 'pushWebsite'
+    delete pagesDir
+}
+
+// The target task requested: orchestrates the sequence and prunes the worktree
 tasks.register('deployReports', Exec) {
     group = "Reporting"
     description = "Commit and push website changes to GitHub gh-pages branch"
-    dependsOn 'pushWebsite'
+    dependsOn 'cleanWorkTree'
     workingDir = '.'
-    commandLine 'sh', '-c', """
-        rm -rf "${pagesDir}"
-        git worktree prune
-    """
+    commandLine = ['git', 'worktree', 'prune']
 }
-
-
 
 application { //Allows  ./gradlew run --args=path-to-test-data
     mainClass = 'edu.odu.cs.MostCommonWords'
