@@ -32,21 +32,19 @@ tasks.withType(Test) {
 }
 
 // Task to copy custom HTML into reports/
-tasks.register('copyHtml', Copy) {
+task copyHtml(type: Copy){
 	from 'src/main/html'
 	into 'build/reports'
 } 
 
 // Task to copy JavaDoc into reports/
-tasks.register('copyJavaDoc', Copy) {
-	dependsOn tasks.named('javadoc')
-	from 'build/docs/javadoc'
-	into 'build/reports/javadoc'
+task copyDocs(type: Copy, dependsOn: 'javadoc') {
+	from 'build/docs/'
+	into 'build/reports'
 }
 
 // Main reports task
-tasks.register('reports') {
-	dependsOn 'build', 'javadoc', 'copyHtml', 'copyJavaDoc'
+task reports(dependsOn:[ 'build', 'copyHtml', 'copyDocs']){
 }
 
 // Configure the built-in git-publish plugin
