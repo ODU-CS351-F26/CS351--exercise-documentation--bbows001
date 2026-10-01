@@ -17,10 +17,6 @@ java {
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.0'
     testImplementation 'org.hamcrest:hamcrest-library:2.2'
-
-    // Added test dependencies for JUnit
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.withType(Test) {
@@ -29,6 +25,10 @@ tasks.withType(Test) {
     testLogging {
         events "passed", "skipped", "failed"
         }
+}
+
+application { //Allows  ./gradlew run --args=path-to-test-data
+    mainClass = 'edu.odu.cs.MostCommonWords'
 }
 
 // Task to copy custom HTML into reports/
@@ -47,6 +47,12 @@ task copyDocs(type: Copy, dependsOn: 'javadoc') {
 task reports(dependsOn:[ 'build', 'copyHtml', 'copyDocs']){
 }
 
+dependencies {
+    // Added test dependencies for JUnit
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
 // Configure the built-in git-publish plugin
 gitPublishCopy.dependsOn reports
 gitPublish{
@@ -67,9 +73,6 @@ gitPublish{
 task deployReports(dependsOn:'gitPublishPush'){}
 
 
-application { //Allows  ./gradlew run --args=path-to-test-data
-    mainClass = 'edu.odu.cs.MostCommonWords'
-}
 
 
 
