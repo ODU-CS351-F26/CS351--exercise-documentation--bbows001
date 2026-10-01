@@ -50,29 +50,24 @@ tasks.register('reports') {
 }
 
 // Configure the built-in git-publish plugin
-gitPublish {
+gitPublishCopy.dependsOn reports
+gitPublish{
     // Set gitHub Repo
-    repoUri = 'git@github.com:ODU-CS351-F26/CS351--exercise-documentation--bbows001.git'
+    repoUri='git@github.com:ODU-CS351-F26/CS351--exercise-documentation--bbows001.git'
 
     // Location the plugin clones repo temporarily
-    branch = 'gh-pages'
+    branch='gh-pages'
 
     // Grab everything to copy
     contents {
-        from 'build/reports'
+        from'build/reports'
     }
     commitMessage = "Updating webpages at ${new Date().format('yyyy-MM-dd HH:mm:ss')}"
 }
 
-// Ensure tests and reports generate before git-publish gathers the files
-tasks.gitPublishCopy.dependsOn tasks.named('reports')
-
 // Deployment task 
-tasks.register('deployReports') {
-    group = "Reporting"
-    description = "Commit and push website changes to GitHub gh-pages branch"
-    dependsOn tasks.named('gitPublishPush')
-}
+task deployReports(dependsOn:'gitPublishPush'){}
+
 
 application { //Allows  ./gradlew run --args=path-to-test-data
     mainClass = 'edu.odu.cs.MostCommonWords'
